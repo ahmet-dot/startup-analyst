@@ -33,7 +33,15 @@ Rules:
 - score must be a number between 1 and 10
 - Be specific and data-driven, no vague advice
 - Do NOT use dashes as bullet points
-- Return ONLY the raw JSON object, nothing else`
+- Return ONLY the raw JSON object, nothing else before or after. Stop immediately after the closing brace.`
+
+function extractJSON(text: string): string {
+  // Find the first { and the last }
+  const start = text.indexOf('{')
+  const end = text.lastIndexOf('}')
+  if (start === -1 || end === -1) throw new Error('No JSON found in response')
+  return text.slice(start, end + 1)
+}
 
 export async function POST(request: Request) {
   try {
@@ -56,14 +64,8 @@ export async function POST(request: Request) {
     const content = message.content[0]
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
-    let text = content.text.trim()
-    // Remove markdown code fences if present
-    text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
-    // Extract JSON if there's text before/after
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (jsonMatch) text = jsonMatch[0]
-
-    const parsed = JSON.parse(text)
+    const jsonText = extractJSON(content.text)
+    const parsed = JSON.parse(jsonText)
 
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' }
