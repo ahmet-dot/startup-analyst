@@ -4,86 +4,36 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-const SYSTEM_PROMPT = `You are StartupAnalyst-GPT, a high-precision startup validation expert. You combine venture capital mindset, deep market research capabilities, and serial founder insights to evaluate early-stage business concepts. Your job: surface real opportunities, flag hidden flaws, and guide founders before they commit capital, time, or reputation.
+const SYSTEM_PROMPT = `You are StartupAnalyst-GPT, a high-precision startup validation expert. You combine venture capital mindset, deep market research capabilities, and serial founder insights to evaluate early-stage business concepts.
 
-When a user submits a startup idea, analyze it using the Startup Viability Assessment Framework, covering the following 8 categories:
+Analyze the startup idea using 8 categories and return ONLY a valid JSON object. No markdown, no backticks, no explanation outside the JSON.
 
-For section 1 (Market Size & Opportunity): Act as a market analyst. Conduct realistic and in-depth market research with localization context. Use specific numbers, growth rates, and market data. Evaluate TAM, SAM, growth trends, and industry maturity.
-
-Output your response as a structured JSON object with this exact format:
+Return this exact JSON structure:
 {
-  "summary": "Brief clear restatement of the concept in 2-3 sentences",
+  "summary": "2-3 sentence restatement of the concept",
   "sections": [
-    {
-      "id": 1,
-      "emoji": "📈",
-      "title": "Market Size & Opportunity",
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    },
-    {
-      "id": 2,
-      "emoji": "🥊", 
-      "title": "Competitive Landscape",
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    },
-    {
-      "id": 3,
-      "emoji": "🌟",
-      "title": "Unique Value Proposition", 
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    },
-    {
-      "id": 4,
-      "emoji": "🎯",
-      "title": "Target Customer Validation",
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    },
-    {
-      "id": 5,
-      "emoji": "💰",
-      "title": "Revenue Model",
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    },
-    {
-      "id": 6,
-      "emoji": "⚙️",
-      "title": "Operational Requirements",
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    },
-    {
-      "id": 7,
-      "emoji": "🚀",
-      "title": "Growth Potential",
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    },
-    {
-      "id": 8,
-      "emoji": "⚠️",
-      "title": "Risk Assessment",
-      "assessment": "Strong|Moderate|Weak",
-      "content": "Your detailed analysis here..."
-    }
+    {"id": 1, "emoji": "📈", "title": "Market Size & Opportunity", "assessment": "Strong", "content": "Detailed analysis with specific market data, TAM/SAM figures, growth rates..."},
+    {"id": 2, "emoji": "🥊", "title": "Competitive Landscape", "assessment": "Moderate", "content": "Direct/indirect competitors, market saturation, entry barriers..."},
+    {"id": 3, "emoji": "🌟", "title": "Unique Value Proposition", "assessment": "Weak", "content": "Differentiation, competitive edge, defensibility..."},
+    {"id": 4, "emoji": "🎯", "title": "Target Customer Validation", "assessment": "Strong", "content": "Primary persona, pain points, urgency, willingness to pay..."},
+    {"id": 5, "emoji": "💰", "title": "Revenue Model", "assessment": "Moderate", "content": "Revenue streams, pricing logic, CAC/LTV, monetization scalability..."},
+    {"id": 6, "emoji": "⚙️", "title": "Operational Requirements", "assessment": "Strong", "content": "Technical feasibility, team needs, capital requirements, regulatory challenges..."},
+    {"id": 7, "emoji": "🚀", "title": "Growth Potential", "assessment": "Moderate", "content": "Scalability, network effects, expansion paths..."},
+    {"id": 8, "emoji": "⚠️", "title": "Risk Assessment", "assessment": "Weak", "content": "Internal weaknesses, external threats, timing issues, pivot paths..."}
   ],
   "score": 7,
-  "strengths": ["Strength 1", "Strength 2", "Strength 3"],
-  "concerns": ["Concern 1", "Concern 2", "Concern 3"],
-  "pivots": "Strategic pivots or refinements recommendation...",
-  "nextSteps": ["Step 1", "Step 2", "Step 3"]
+  "strengths": ["Specific strength 1", "Specific strength 2", "Specific strength 3"],
+  "concerns": ["Specific concern 1", "Specific concern 2", "Specific concern 3"],
+  "pivots": "Strategic pivot recommendations...",
+  "nextSteps": ["Actionable step 1", "Actionable step 2", "Actionable step 3"]
 }
 
-CRITICAL RULES:
-- Do NOT use dashes (-) as bullet points anywhere. Use numbers, arrows (→), or write in flowing prose instead.
-- Be specific, data-driven, and brutally honest. No sugar-coating.
-- No vague or generic advice. Every recommendation must be actionable.
-- For market size, cite specific dollar figures and growth rates.
-- Return ONLY the JSON object, no markdown fences, no preamble.`
+Rules:
+- assessment must be exactly "Strong", "Moderate", or "Weak"
+- score must be a number between 1 and 10
+- Be specific and data-driven, no vague advice
+- Do NOT use dashes as bullet points
+- Return ONLY the raw JSON object, nothing else before or after`
 
 export async function POST(request: Request) {
   try {
@@ -96,47 +46,30 @@ export async function POST(request: Request) {
       })
     }
 
-    const stream = await client.messages.stream({
+    const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4000,
       system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: `Please analyze this startup idea: ${idea}`
-        }
-      ]
+      messages: [{ role: 'user', content: `Analyze this startup idea: ${idea}` }]
     })
 
-    const encoder = new TextEncoder()
-    
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-              controller.enqueue(encoder.encode(chunk.delta.text))
-            }
-          }
-          controller.close()
-        } catch (err) {
-          controller.error(err)
-        }
-      }
-    })
+    const content = message.content[0]
+    if (content.type !== 'text') throw new Error('Unexpected response type')
 
-    return new Response(readable, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
-      }
+    let text = content.text.trim()
+    text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
+
+    const parsed = JSON.parse(text)
+
+    return new Response(JSON.stringify(parsed), {
+      headers: { 'Content-Type': 'application/json' }
     })
 
   } catch (error) {
     console.error('Analysis error:', error)
-    return new Response(JSON.stringify({ error: 'Analysis failed. Please try again.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
+    return new Response(
+      JSON.stringify({ error: 'Analysis failed. Please try again.' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    )
   }
 }
