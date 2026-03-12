@@ -33,7 +33,7 @@ Rules:
 - score must be a number between 1 and 10
 - Be specific and data-driven, no vague advice
 - Do NOT use dashes as bullet points
-- Return ONLY the raw JSON object, nothing else before or after`
+- Return ONLY the raw JSON object, nothing else`
 
 export async function POST(request: Request) {
   try {
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     }
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5',
       max_tokens: 4000,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: `Analyze this startup idea: ${idea}` }]
@@ -57,7 +57,11 @@ export async function POST(request: Request) {
     if (content.type !== 'text') throw new Error('Unexpected response type')
 
     let text = content.text.trim()
+    // Remove markdown code fences if present
     text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
+    // Extract JSON if there's text before/after
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (jsonMatch) text = jsonMatch[0]
 
     const parsed = JSON.parse(text)
 
@@ -65,10 +69,10 @@ export async function POST(request: Request) {
       headers: { 'Content-Type': 'application/json' }
     })
 
-  } catch (error) {
-    console.error('Analysis error:', error)
+  } catch (error: any) {
+    console.error('Analysis error:', error?.message || error)
     return new Response(
-      JSON.stringify({ error: 'Analysis failed. Please try again.' }),
+      JSON.stringify({ error: `Analysis failed: ${error?.message || 'Unknown error'}` }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
